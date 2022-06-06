@@ -7,15 +7,25 @@ import time
 PATH_BTRFS = '/sbin/btrfs'
 PATH_SNAPSHOT_SOURCE = '/mnt/images/.snapshots' # Path to the source snapshots
 SUBPATH_SNAPSHOT_TARGET = '.snapshots' # The non-changing part of the target path, e.g.: '.snapshots'. Don't prefix with disk path.
+MODE_TARGET_ALLOWLIST = True # Set False to use DISK_TARGET_DENYLIST instead of DISK_TARGET_ALLOWLIST
+DISK_TARGET_ALLOWLIST = ['/mnt/disk5'] # Only put snapshots on these mounts. e.g.: ['/mnt/disk5']
 DISK_TARGET_DENYLIST = [] # Don't put snapshots on these mounts. e.g.: ['/mnt/disk4', '/mnt/disk3']
 REGEX_MOUNTPOINT = '^/dev/md[0-9]+ on /mnt/disk[0-9]* type btrfs \(rw' # Unraid. Adjust if you're using a different distro.
 
 ## Validate configuration entries
+if not os.path.exists(PATH_BTRFS):
+    print(f'Error: BTRFS executable not found at {PATH_BTRFS}')
+    exit(1)
 if not os.path.isdir(PATH_SNAPSHOT_SOURCE):
     raise Exception(f'Invalid configuration: PATH_SNAPSHOT_SOURCE is not a directory.')
 for entry in DISK_TARGET_DENYLIST:
     if re.match('^/mnt/disk[0-9]+$', entry) is None:
         raise ValueError(f'Invalid disk target denylist entry: {entry}')
+for entry in DISK_TARGET_ALLOWLIST:
+    if re.match('^/mnt/disk[0-9]+$', entry) is None:
+        raise ValueError(f'Invalid disk target allowlist entry: {entry}')
+if MODE_TARGET_ALLOWLIST and len(DISK_TARGET_ALLOWLIST) == 0:
+    raise ValueError('Invalid configuration: MODE_TARGET_ALLOWLIST is True but no entries in DISK_TARGET_ALLOWLIST')
 
 # Get potential target volumes 
 targets = []
@@ -23,7 +33,9 @@ for mount in subprocess.check_output(['/bin/mount']).decode('utf-8').split('\n')
     if re.match(REGEX_MOUNTPOINT, mount) is not None:
         mount = mount.split(' on ')[1]
         mount = mount.split(' type ')[0]
-        if mount not in DISK_TARGET_DENYLIST:
+        if MODE_TARGET_ALLOWLIST and mount in DISK_TARGET_ALLOWLIST:
+            targets.append(mount)
+        if not MODE_TARGET_ALLOWLIST and mount in DISK_TARGET_DENYLIST:
             targets.append(mount)
 
 def get_snapshot_size(path: str) -> int:
@@ -74,8 +86,8 @@ for snapshot in os.listdir(PATH_SNAPSHOT_SOURCE):
             m = f"0{m}"
         if s < 10:
             s = f"0{s}"
-        print(f"{snapshot}: {dst_size/1048576:,.2f}/{src_size/1048576:,.2f}MB | {dst_size*100/src_size:.2f}% @ {speed:.2f}MB/s | {h}:{m}:{s} elapsed.")
-        time.sleep(5)
+        print(f"\r{snapshot}: {dst_size/1048576:,.2f}/{src_size/1048576:,.2f}MB | {dst_size*100/src_size:.2f}% @ {speed:.2f}MB/s | {h}:{m}:{s} elapsed.", end='')
+        time.sleep(1)
         src.poll()
         dst.poll()
     print()
