@@ -3,7 +3,7 @@ Move btrfs snapshots to other disks automatically
 
 Created in a ritalinless fog to free up space on my VM images SSD by sending my nightly snapshots (done via cron) to whatever disk has the most space free and isn't on the deny list.
 
-Very dirty and not good. I don't code often enough. Fuck me.
+There's a major downside to the approach used in this script, as a side effect of the way Unraid (my target system)'s storage works. Since there a bunch of individual btrfs volumes in use instead of one large btrfs pool, this approach almost inevitably leads to duplication and wasted space. There's not really a way I know of around this beyond having disks specifically for holding snapshots, and putting all others on the deny list (or having an optional allow list mode).
 
 ## Usage
 In my use case I have
