@@ -29,3 +29,4 @@ Configuration is minimal and set via variables near the top of the file.
 * Batching: If we're reading from a fast SSD but writing to slow HDDs, maybe we can run multiple subprocesses to write a snapshot to each to make clearing faster.
 * Make sure there's actually space on (any of) the target volume(s).
 * Improve speed measurement
+* Check to see if the snapshot we're sending already exists in some form on another disk, if there's room to continue, and do that, instead of potentially duplicating snapshots or partial snapshots across multiple disks. This *shouldn't* be an issue though, as snapshots *should* be removed after they're sent. But if they're interrupted, maybe?
