@@ -1,13 +1,17 @@
+from math import remainder
 import os
+from pprint import pprint
 import subprocess
 import re
 import time
+from datetime import timedelta
 
 ### Configuration settings
 PATH_BTRFS = '/sbin/btrfs'
 PATH_SNAPSHOT_SOURCE = '/mnt/images/.snapshots' # Path to the source snapshots
 SUBPATH_SNAPSHOT_TARGET = '.snapshots' # The non-changing part of the target path, e.g.: '.snapshots'. Don't prefix with disk path.
 DISK_TARGET_DENYLIST = [] # Don't put snapshots on these mounts. e.g.: ['/mnt/disk4', '/mnt/disk3']
+REGEX_MOUNTPOINT = '^/dev/md[0-9]+ on /mnt/disk[0-9]* type btrfs \(rw' # Unraid. Adjust if you're using a different distro.
 
 ## Validate configuration entries
 if not os.path.isdir(PATH_SNAPSHOT_SOURCE):
@@ -19,7 +23,7 @@ for entry in DISK_TARGET_DENYLIST:
 # Get potential target volumes 
 targets = []
 for mount in subprocess.check_output(['/bin/mount']).decode('utf-8').split('\n'):
-    if re.match('^/dev/md[0-9]+ on /mnt/disk[0-9]* type btrfs \(rw', mount) is not None:
+    if re.match(REGEX_MOUNTPOINT, mount) is not None:
         mount = mount.split(' on ')[1]
         mount = mount.split(' type ')[0]
         if mount not in DISK_TARGET_DENYLIST:
@@ -56,6 +60,7 @@ for snapshot in os.listdir(PATH_SNAPSHOT_SOURCE):
 
     # Counters
     src_size = get_snapshot_size(src_path)
+    dst_size_initial = get_snapshot_size(dst_path) # for calculating speed, if we don't start from zero
     start_time = time.time()
 
     # Move snapshot to target
@@ -64,6 +69,7 @@ for snapshot in os.listdir(PATH_SNAPSHOT_SOURCE):
     dst = subprocess.Popen([PATH_BTRFS, 'receive', dst_path], stdin=src.stdout, stderr=subprocess.PIPE)
     while (src.returncode is None and dst.returncode is None):
         dst_size = get_snapshot_size(dst_path)
+        speed = (dst_size - dst_size_initial) / (time.time() - start_time) / 1048576
         h, r = divmod(time.time() - start_time, 3600)
         m, s = divmod(r, 60)
         h, m, s = int(h), int(m), int(s)
@@ -71,8 +77,10 @@ for snapshot in os.listdir(PATH_SNAPSHOT_SOURCE):
             m = f"0{m}"
         if s < 10:
             s = f"0{s}"
-        print(f"{dst_size/1048576:,.2f}/{src_size/1048576:,.2f}MB | {dst_size*100/src_size:.2f}% | {h}:{m}:{s} elapsed.")
+        print(f"{snapshot}: {dst_size/1048576:,.2f}/{src_size/1048576:,.2f}MB | {dst_size*100/src_size:.2f}% @ {speed:.2f}MB/s | {h}:{m}:{s} elapsed.")
         time.sleep(5)
+        src.poll()
+        dst.poll()
     print()
 
     # Remove snapshot from source if src and dst are 0
