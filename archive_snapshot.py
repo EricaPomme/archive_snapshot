@@ -1,10 +1,7 @@
-from math import remainder
 import os
-from pprint import pprint
 import subprocess
 import re
 import time
-from datetime import timedelta
 
 ### Configuration settings
 PATH_BTRFS = '/sbin/btrfs'
